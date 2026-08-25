@@ -1,0 +1,1855 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ScalarPulse · 实时训练指标</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --surface: rgba(255, 255, 255, .94);
+      --surface-solid: #ffffff;
+      --surface-raised: #f9fafc;
+      --sidebar: #111827;
+      --sidebar-muted: #9ca3af;
+      --sidebar-hover: rgba(255, 255, 255, .08);
+      --sidebar-active: rgba(99, 102, 241, .22);
+      --text: #111827;
+      --muted: #667085;
+      --faint: #98a2b3;
+      --border: #e4e7ec;
+      --border-strong: #d0d5dd;
+      --accent: #6366f1;
+      --accent-strong: #4f46e5;
+      --accent-soft: #eef2ff;
+      --success: #12b76a;
+      --warning: #f79009;
+      --danger: #f04438;
+      --chart-grid: rgba(102, 112, 133, .14);
+      --chart-label: #667085;
+      --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 26px rgba(16, 24, 40, .06);
+      --focus: 0 0 0 3px rgba(99, 102, 241, .22);
+      --radius: 14px;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #090e18;
+      --surface: rgba(18, 25, 39, .94);
+      --surface-solid: #121927;
+      --surface-raised: #182131;
+      --sidebar: #0b101a;
+      --sidebar-muted: #8b95a7;
+      --sidebar-hover: rgba(255, 255, 255, .06);
+      --sidebar-active: rgba(129, 140, 248, .18);
+      --text: #f2f4f7;
+      --muted: #a6afbf;
+      --faint: #7f899a;
+      --border: #293345;
+      --border-strong: #3a465b;
+      --accent: #818cf8;
+      --accent-strong: #a5b4fc;
+      --accent-soft: rgba(99, 102, 241, .14);
+      --success: #32d583;
+      --warning: #fdb022;
+      --danger: #f97066;
+      --chart-grid: rgba(166, 175, 191, .12);
+      --chart-label: #98a2b3;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 14px 34px rgba(0, 0, 0, .18);
+      --focus: 0 0 0 3px rgba(129, 140, 248, .22);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 84% -8%, rgba(99, 102, 241, .09), transparent 32rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+
+    button { color: inherit; }
+
+    button:focus-visible, input:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 20;
+      display: flex;
+      width: 248px;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--sidebar);
+      color: #f8fafc;
+      border-right: 1px solid rgba(255, 255, 255, .05);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      height: 68px;
+      padding: 0 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, .07);
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #818cf8, #4f46e5);
+      box-shadow: 0 8px 20px rgba(79, 70, 229, .35);
+    }
+
+    .brand-mark svg { width: 20px; height: 20px; }
+
+    .brand-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .01em;
+    }
+
+    .brand-subtitle {
+      color: var(--sidebar-muted);
+      font-size: 11px;
+      letter-spacing: .02em;
+    }
+
+    .run-panel {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+      padding: 18px 10px 12px;
+    }
+
+    .run-panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px 10px;
+      color: var(--sidebar-muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .run-count {
+      min-width: 20px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
+      color: #d0d5dd;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .run-list {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+      gap: 4px;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #374151 transparent;
+    }
+
+    .run-item {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 9px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 10px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: #e5e7eb;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color .16s ease, transform .16s ease;
+    }
+
+    .run-item:hover { background: var(--sidebar-hover); }
+    .run-item:active { transform: translateY(1px); }
+    .run-item.active { background: var(--sidebar-active); }
+
+    .run-dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: #667085;
+      box-shadow: 0 0 0 3px rgba(102, 112, 133, .12);
+    }
+
+    .run-dot.running {
+      background: #32d583;
+      box-shadow: 0 0 0 3px rgba(50, 213, 131, .14);
+      animation: pulse 2s infinite;
+    }
+
+    .run-dot.completed { background: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, .14); }
+    .run-dot.stopped { background: var(--warning); box-shadow: 0 0 0 3px rgba(247, 144, 9, .14); }
+    .run-dot.failed { background: #f97066; box-shadow: 0 0 0 3px rgba(249, 112, 102, .14); }
+
+    .run-copy { min-width: 0; }
+
+    .run-name {
+      display: block;
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .run-meta {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--sidebar-muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .sidebar-empty {
+      padding: 30px 10px;
+      color: var(--sidebar-muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 13px 18px 16px;
+      border-top: 1px solid rgba(255, 255, 255, .07);
+      color: var(--sidebar-muted);
+      font-size: 10px;
+    }
+
+    .endpoint {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+
+    .endpoint code {
+      overflow: hidden;
+      color: #d0d5dd;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .main {
+      grid-column: 2;
+      min-width: 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      display: flex;
+      min-height: 68px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .run-heading { min-width: 0; }
+
+    .run-heading-row {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .run-heading h1 {
+      overflow: hidden;
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .run-id {
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--surface-raised);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .badge::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .badge.running { background: rgba(18, 183, 106, .10); color: var(--success); }
+    .badge.completed { background: var(--accent-soft); color: var(--accent); }
+    .badge.stopped { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
+    .badge.failed { background: rgba(240, 68, 56, .10); color: var(--danger); }
+
+    .topbar-actions {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .connection {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface-solid);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--warning);
+    }
+
+    .connection.live .connection-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(18, 183, 106, .12); }
+    .connection.offline .connection-dot { background: var(--danger); }
+    .connection.paused .connection-dot { background: var(--warning); }
+
+    .icon-button, .button {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface-solid);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+    }
+
+    .icon-button { width: 34px; padding: 0; }
+    .button { padding: 0 11px; }
+    .icon-button svg, .button svg { width: 15px; height: 15px; }
+    .icon-button:hover, .button:hover { border-color: var(--border-strong); background: var(--surface-raised); }
+    .icon-button:active, .button:active { transform: translateY(1px); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .button.primary:hover { border-color: var(--accent-strong); background: var(--accent-strong); }
+    .button.paused { border-color: var(--warning); color: var(--warning); }
+    .button:disabled { cursor: not-allowed; opacity: .45; transform: none; }
+
+    .content {
+      width: 100%;
+      max-width: 1640px;
+      margin: 0 auto;
+      padding: 22px 24px 36px;
+    }
+
+    .empty-state {
+      display: grid;
+      min-height: calc(100vh - 120px);
+      place-items: center;
+    }
+
+    .empty-card {
+      width: min(430px, 100%);
+      padding: 38px 30px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface-solid);
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .empty-visual {
+      display: grid;
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 18px;
+      place-items: center;
+      border-radius: 16px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .empty-visual svg { width: 30px; height: 30px; }
+    .empty-card h2 { margin: 0 0 7px; font-size: 17px; }
+    .empty-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .empty-card code { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+    .dashboard[hidden], .empty-state[hidden] { display: none; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-solid);
+      box-shadow: 0 1px 2px rgba(16, 24, 40, .03);
+    }
+
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .range-control {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .range-control input {
+      width: 116px;
+      height: 4px;
+      border-radius: 999px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .range-value {
+      min-width: 43px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle-track {
+      position: relative;
+      width: 34px;
+      height: 19px;
+      border-radius: 999px;
+      background: var(--border-strong);
+      transition: background-color .15s ease;
+    }
+
+    .toggle-track::after {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, .25);
+      content: "";
+      transition: transform .15s ease;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(15px); }
+    .toggle input:focus-visible + .toggle-track { box-shadow: var(--focus); }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      min-width: 0;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface-solid);
+    }
+
+    .stat-label { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .stat-value {
+      overflow: hidden;
+      margin-top: 5px;
+      font-size: 19px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.02em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stat-note { margin-left: 4px; color: var(--faint); font-size: 10px; font-weight: 500; }
+
+    .section-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 4px 1px 11px;
+    }
+
+    .section-heading h2 { margin: 0; font-size: 14px; }
+    .section-hint { color: var(--muted); font-size: 11px; }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric-card {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-solid);
+      box-shadow: var(--shadow);
+    }
+
+    .metric-card-header {
+      display: flex;
+      min-height: 69px;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 16px 8px;
+    }
+
+    .metric-title {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .metric-swatch { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+    .metric-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .metric-current {
+      margin-top: 4px;
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.025em;
+    }
+
+    .metric-change {
+      flex: none;
+      padding-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 232px;
+      padding: 0 6px 6px;
+    }
+
+    .chart-wrap canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      z-index: 3;
+      min-width: 112px;
+      padding: 8px 9px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--surface-solid);
+      box-shadow: 0 7px 20px rgba(16, 24, 40, .15);
+      color: var(--text);
+      font-size: 10px;
+      line-height: 1.55;
+      pointer-events: none;
+      transform: translate(10px, -50%);
+      white-space: nowrap;
+    }
+
+    .chart-tooltip[hidden] { display: none; }
+    .tooltip-value { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .tooltip-muted { color: var(--muted); }
+
+    .no-metrics {
+      padding: 48px 20px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 100;
+      max-width: min(360px, calc(100vw - 40px));
+      padding: 10px 13px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-solid);
+      box-shadow: 0 12px 32px rgba(16, 24, 40, .18);
+      font-size: 12px;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+
+    .toast[hidden] { display: none; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(50, 213, 131, .12); }
+      50% { box-shadow: 0 0 0 5px rgba(50, 213, 131, .04); }
+    }
+
+    @media (max-width: 1000px) {
+      .app { grid-template-columns: 216px minmax(0, 1fr); }
+      .sidebar { width: 216px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .app { display: block; }
+      .sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+        max-height: 214px;
+      }
+      .brand { height: 56px; }
+      .run-panel { padding: 10px; }
+      .run-list { max-height: 112px; flex-direction: row; overflow-x: auto; }
+      .run-item { min-width: 180px; max-width: 220px; }
+      .sidebar-footer { display: none; }
+      .main { grid-column: auto; }
+      .topbar { min-height: 58px; padding: 9px 14px; }
+      .connection-text, .button-label { display: none; }
+      .connection { width: 34px; justify-content: center; padding: 0; }
+      .content { padding: 14px 12px 28px; }
+      .controls { align-items: stretch; }
+      .controls, .control-group { width: 100%; }
+      .controls .control-group:last-child { justify-content: flex-end; }
+      .range-control { flex: 1; }
+      .range-control input { min-width: 80px; flex: 1; }
+      .chart-wrap { height: 220px; }
+    }
+
+    @media (max-width: 460px) {
+      .run-heading .badge { display: none; }
+      .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .stat { padding: 11px 12px; }
+      .stat-value { font-size: 16px; }
+      .section-hint { display: none; }
+      .metric-card-header { padding-inline: 13px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="训练运行列表">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17l5-5 4 3 7-9"/><path d="M16 6h3v3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">ScalarPulse</div>
+          <div class="brand-subtitle">LIVE METRICS</div>
+        </div>
+      </div>
+
+      <div class="run-panel">
+        <div class="run-panel-title">
+          <span>训练运行</span>
+          <span class="run-count" id="runCount">0</span>
+        </div>
+        <div class="run-list" id="runList" role="listbox" aria-label="选择训练运行">
+          <div class="sidebar-empty">正在查找训练运行…</div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div>数据接口</div>
+        <div class="endpoint"><span>快照</span><code>GET /api/state</code></div>
+        <div class="endpoint"><span>实时</span><code>SSE /api/events</code></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="run-heading">
+          <div class="run-heading-row">
+            <h1 id="runTitle">训练指标</h1>
+            <span class="badge" id="runStatus" hidden>等待中</span>
+          </div>
+          <div class="run-id" id="runId">等待服务器数据</div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="connection connecting" id="connection" role="status" aria-live="polite" title="正在连接实时数据">
+            <span class="connection-dot" aria-hidden="true"></span>
+            <span class="connection-text" id="connectionText">连接中</span>
+          </div>
+          <button class="icon-button" id="themeButton" type="button" title="切换深浅色" aria-label="切换深浅色">
+            <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="empty-state" id="emptyState">
+          <div class="empty-card">
+            <div class="empty-visual" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/>
+              </svg>
+            </div>
+            <h2 id="emptyTitle">等待训练开始</h2>
+            <p id="emptyCopy">调用客户端记录指标后，数据会通过 <code>/api/events</code> 实时出现在这里。</p>
+          </div>
+        </section>
+
+        <section class="dashboard" id="dashboard" hidden>
+          <div class="controls" aria-label="图表控制">
+            <div class="control-group">
+              <label class="range-control" for="smoothing">
+                <span>平滑</span>
+                <input id="smoothing" type="range" min="1" max="50" value="1" step="1">
+                <span class="range-value" id="smoothingValue">原始</span>
+              </label>
+              <label class="toggle">
+                <input id="autoFollow" type="checkbox" checked>
+                <span class="toggle-track" aria-hidden="true"></span>
+                <span>自动跟随</span>
+              </label>
+            </div>
+            <div class="control-group">
+              <button class="button" id="pauseButton" type="button" aria-label="暂停实时显示">
+                <svg id="pauseIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+                <span class="button-label" id="pauseLabel">暂停</span>
+              </button>
+              <button class="button primary" id="exportButton" type="button" aria-label="导出 CSV">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>
+                <span class="button-label">导出 CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="stats" aria-label="运行摘要">
+            <div class="stat"><div class="stat-label">最新步数</div><div class="stat-value" id="statStep">—</div></div>
+            <div class="stat"><div class="stat-label">指标数量</div><div class="stat-value" id="statMetrics">—</div></div>
+            <div class="stat"><div class="stat-label">运行时长</div><div class="stat-value" id="statDuration">—</div></div>
+            <div class="stat"><div class="stat-label">最近更新</div><div class="stat-value" id="statUpdated">—</div></div>
+          </div>
+
+          <div class="section-heading">
+            <h2>实时指标</h2>
+            <span class="section-hint" id="chartHint">显示最近 240 个点 · 悬停查看详情</span>
+          </div>
+          <div class="chart-grid" id="chartGrid"></div>
+          <div class="no-metrics" id="noMetrics" hidden>该运行还没有记录数值指标。</div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <noscript>ScalarPulse 需要启用 JavaScript 才能接收并绘制实时训练指标。</noscript>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const API_STATE = "/api/state";
+      const API_EVENTS = "/api/events";
+      const FOLLOW_POINTS = 240;
+      const MAX_POINTS_PER_METRIC = 20000;
+      const MAX_PAUSED_EVENTS = 5000;
+      const palette = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#14b8a6", "#f97316"];
+
+      const dom = {
+        runList: document.getElementById("runList"),
+        runCount: document.getElementById("runCount"),
+        runTitle: document.getElementById("runTitle"),
+        runId: document.getElementById("runId"),
+        runStatus: document.getElementById("runStatus"),
+        connection: document.getElementById("connection"),
+        connectionText: document.getElementById("connectionText"),
+        themeButton: document.getElementById("themeButton"),
+        themeIcon: document.getElementById("themeIcon"),
+        emptyState: document.getElementById("emptyState"),
+        emptyTitle: document.getElementById("emptyTitle"),
+        emptyCopy: document.getElementById("emptyCopy"),
+        dashboard: document.getElementById("dashboard"),
+        smoothing: document.getElementById("smoothing"),
+        smoothingValue: document.getElementById("smoothingValue"),
+        autoFollow: document.getElementById("autoFollow"),
+        pauseButton: document.getElementById("pauseButton"),
+        pauseLabel: document.getElementById("pauseLabel"),
+        pauseIcon: document.getElementById("pauseIcon"),
+        exportButton: document.getElementById("exportButton"),
+        statStep: document.getElementById("statStep"),
+        statMetrics: document.getElementById("statMetrics"),
+        statDuration: document.getElementById("statDuration"),
+        statUpdated: document.getElementById("statUpdated"),
+        chartHint: document.getElementById("chartHint"),
+        chartGrid: document.getElementById("chartGrid"),
+        noMetrics: document.getElementById("noMetrics"),
+        toast: document.getElementById("toast")
+      };
+
+      const app = {
+        runs: new Map(),
+        selectedRunId: null,
+        source: null,
+        paused: false,
+        pending: [],
+        smoothing: clampNumber(localStorage.getItem("scalarpulse-smoothing"), 1, 50, 1),
+        autoFollow: localStorage.getItem("scalarpulse-follow") !== "false",
+        renderQueued: false,
+        cards: new Map(),
+        lastEventAt: null,
+        fetchFailed: false,
+        reconnectAttempt: 0,
+        reconnectTimer: null,
+        toastTimer: null
+      };
+
+      function clampNumber(value, min, max, fallback) {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+      }
+
+      function safeDate(value) {
+        if (value == null || value === "") return null;
+        // Python's time.time() uses Unix seconds, while Date(number) expects ms.
+        const normalized = typeof value === "number" && Math.abs(value) < 1e12 ? value * 1000 : value;
+        const date = normalized instanceof Date ? normalized : new Date(normalized);
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function toTimestamp(value) {
+        const date = safeDate(value);
+        return date ? date.toISOString() : null;
+      }
+
+      function toFinite(value) {
+        const number = typeof value === "number" ? value : Number(value);
+        return Number.isFinite(number) ? number : null;
+      }
+
+      function statusClass(status) {
+        const value = String(status || "unknown").toLowerCase();
+        if (["running", "active", "training", "started"].includes(value)) return "running";
+        if (["complete", "completed", "finished", "done", "success", "succeeded"].includes(value)) return "completed";
+        if (["stopped", "interrupted", "terminated"].includes(value)) return "stopped";
+        if (["failed", "error", "cancelled", "canceled"].includes(value)) return "failed";
+        return "unknown";
+      }
+
+      function statusLabel(status) {
+        const kind = statusClass(status);
+        if (kind === "running") return "运行中";
+        if (kind === "completed") return "已完成";
+        if (kind === "stopped") return "已停止";
+        if (kind === "failed") return String(status || "失败").toLowerCase().includes("cancel") ? "已取消" : "失败";
+        return status ? String(status) : "等待中";
+      }
+
+      function pointFrom(raw, fallbackStep, fallbackTime) {
+        if (typeof raw === "number" || typeof raw === "string") {
+          const value = toFinite(raw);
+          return value == null ? null : { step: fallbackStep, value, time: fallbackTime || null };
+        }
+        if (!raw || typeof raw !== "object") return null;
+        const value = toFinite(raw.value ?? raw.y ?? raw.val);
+        if (value == null) return null;
+        const step = toFinite(raw.step ?? raw.x ?? raw.iteration ?? raw.epoch) ?? fallbackStep;
+        const time = toTimestamp(raw.timestamp ?? raw.time ?? raw.created_at ?? fallbackTime);
+        return { step, value, time };
+      }
+
+      function seriesFrom(rawSeries, fallbackTime) {
+        const result = [];
+        if (Array.isArray(rawSeries)) {
+          rawSeries.forEach((rawPoint, index) => {
+            const point = pointFrom(rawPoint, index, fallbackTime);
+            if (point) result.push(point);
+          });
+        } else if (rawSeries && typeof rawSeries === "object" && Array.isArray(rawSeries.values)) {
+          rawSeries.values.forEach((rawValue, index) => {
+            const step = toFinite(rawSeries.steps?.[index] ?? rawSeries.x?.[index]) ?? index;
+            const time = rawSeries.timestamps?.[index] ?? rawSeries.times?.[index] ?? fallbackTime;
+            const point = pointFrom(rawValue, step, time);
+            if (point) result.push(point);
+          });
+        } else {
+          const point = pointFrom(rawSeries, 0, fallbackTime);
+          if (point) result.push(point);
+        }
+        return dedupeAndSort(result);
+      }
+
+      function dedupeAndSort(points) {
+        const byStep = new Map();
+        points.forEach((point) => byStep.set(String(point.step), point));
+        return [...byStep.values()]
+          .sort((a, b) => a.step - b.step)
+          .slice(-MAX_POINTS_PER_METRIC);
+      }
+
+      function normalizedRun(raw, fallbackId) {
+        if (!raw || typeof raw !== "object") return null;
+        const id = String(raw.id ?? raw.run_id ?? raw.runId ?? fallbackId ?? "default");
+        const startedAt = toTimestamp(raw.started_at ?? raw.startedAt ?? raw.created_at ?? raw.createdAt);
+        const updatedAt = toTimestamp(raw.updated_at ?? raw.updatedAt ?? raw.ended_at ?? raw.endedAt ?? raw.timestamp ?? raw.time) || startedAt;
+        const run = {
+          id,
+          name: String(raw.name ?? raw.run_name ?? raw.runName ?? raw.label ?? id),
+          status: String(raw.status ?? raw.state ?? "running"),
+          startedAt,
+          updatedAt,
+          metricCount: Number(raw.metric_count ?? raw.metricCount) || Object.keys(raw.summary ?? {}).length,
+          metrics: new Map()
+        };
+
+        const metrics = raw.metrics ?? raw.series;
+        if (metrics && typeof metrics === "object" && !Array.isArray(metrics)) {
+          Object.entries(metrics).forEach(([name, series]) => {
+            const points = seriesFrom(series, updatedAt);
+            if (points.length) run.metrics.set(name, points);
+          });
+        }
+
+        const history = raw.history ?? raw.points ?? raw.records;
+        if (Array.isArray(history)) {
+          history.forEach((record, index) => {
+            if (!record || typeof record !== "object") return;
+            const step = toFinite(record.step ?? record.iteration ?? record.epoch ?? record.x) ?? index;
+            const time = record.timestamp ?? record.time ?? updatedAt;
+            const normalizedTime = toTimestamp(time);
+            if (normalizedTime && (!run.updatedAt || normalizedTime > run.updatedAt)) run.updatedAt = normalizedTime;
+            const values = record.metrics && typeof record.metrics === "object" ? record.metrics : record;
+            Object.entries(values).forEach(([name, value]) => {
+              if (["step", "iteration", "epoch", "x", "timestamp", "time", "metrics", "run_id", "runId"].includes(name)) return;
+              const numeric = toFinite(value);
+              if (numeric == null) return;
+              if (!run.metrics.has(name)) run.metrics.set(name, []);
+              run.metrics.get(name).push({ step, value: numeric, time: normalizedTime });
+            });
+          });
+          run.metrics.forEach((points, name) => run.metrics.set(name, dedupeAndSort(points)));
+        }
+        run.metricCount = Math.max(run.metricCount, run.metrics.size);
+        return run;
+      }
+
+      function mergeRun(incoming, replaceMetrics = false) {
+        if (!incoming) return;
+        const existing = app.runs.get(incoming.id);
+        if (!existing) {
+          app.runs.set(incoming.id, incoming);
+          return;
+        }
+        existing.name = incoming.name || existing.name;
+        existing.status = incoming.status || existing.status;
+        existing.startedAt = incoming.startedAt || existing.startedAt;
+        existing.updatedAt = incoming.updatedAt || existing.updatedAt;
+        existing.metricCount = Math.max(existing.metricCount || 0, incoming.metricCount || 0);
+        if (replaceMetrics) existing.metrics = incoming.metrics;
+        else {
+          incoming.metrics.forEach((points, name) => {
+            const combined = [...(existing.metrics.get(name) || []), ...points];
+            existing.metrics.set(name, dedupeAndSort(combined));
+          });
+        }
+      }
+
+      function unwrap(payload) {
+        if (payload && typeof payload === "object" && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+          const keys = Object.keys(payload);
+          if (keys.length <= 3 && (keys.includes("type") || keys.includes("event") || keys.length === 1)) {
+            return { ...payload.data, type: payload.type ?? payload.event ?? payload.data.type };
+          }
+        }
+        return payload;
+      }
+
+      function ingestSnapshot(rawPayload) {
+        const payload = unwrap(rawPayload) || {};
+        const rawRuns = payload.runs ?? payload.items;
+        const preferredId = payload.selected_run_id ?? payload.active_run_id ?? payload.activeRunId;
+        const incoming = [];
+        if (Array.isArray(rawRuns)) {
+          rawRuns.forEach((raw) => {
+            const run = normalizedRun(raw);
+            if (run) incoming.push(run);
+          });
+        } else if (rawRuns && typeof rawRuns === "object") {
+          Object.entries(rawRuns).forEach(([id, raw]) => {
+            const run = normalizedRun(raw, id);
+            if (run) incoming.push(run);
+          });
+        } else {
+          const rawRun = payload.run ?? payload;
+          if (rawRun && (rawRun.metrics || rawRun.history || rawRun.points || rawRun.run_id || rawRun.id)) {
+            const run = normalizedRun(rawRun);
+            if (run) incoming.push(run);
+          }
+        }
+
+        // The ScalarPulse API keeps run metadata in `runs` and the selected run's
+        // sampled history in top-level `records`. Preserve cached histories for
+        // the other runs, then replace only the selected run with its snapshot.
+        incoming.forEach((run) => mergeRun(run, false));
+        if (preferredId != null && Array.isArray(payload.records)) {
+          const selectedMeta = payload.run
+            ?? (Array.isArray(rawRuns) ? rawRuns.find((raw) => String(raw?.id ?? raw?.run_id) === String(preferredId)) : null)
+            ?? { id: preferredId };
+          const selected = normalizedRun({ ...selectedMeta, id: preferredId, records: payload.records }, preferredId);
+          // Merge instead of replace: an SSE point may arrive while this
+          // snapshot request is in flight, and must not be rolled back.
+          mergeRun(selected, false);
+        }
+        selectBestRun(preferredId);
+        scheduleRender();
+      }
+
+      function ensureRun(id, payload) {
+        const runId = String(id ?? "default");
+        if (!app.runs.has(runId)) {
+          app.runs.set(runId, {
+            id: runId,
+            name: String(payload?.run_name ?? payload?.runName ?? payload?.name ?? runId),
+            status: String(payload?.status ?? "running"),
+            startedAt: toTimestamp(payload?.started_at ?? payload?.startedAt ?? payload?.timestamp),
+            updatedAt: toTimestamp(payload?.timestamp ?? payload?.time) || new Date().toISOString(),
+            metricCount: 0,
+            metrics: new Map()
+          });
+        }
+        return app.runs.get(runId);
+      }
+
+      function appendMetric(run, name, value, step, time) {
+        const numeric = toFinite(value);
+        if (numeric == null || !name) return;
+        const series = run.metrics.get(String(name)) || [];
+        const fallbackStep = series.length ? series[series.length - 1].step + 1 : 0;
+        const point = {
+          step: toFinite(step) ?? fallbackStep,
+          value: numeric,
+          time: toTimestamp(time) || new Date().toISOString()
+        };
+        const last = series[series.length - 1];
+        if (last && last.step === point.step) series[series.length - 1] = point;
+        else if (!last || point.step > last.step) series.push(point);
+        else {
+          const index = series.findIndex((item) => item.step >= point.step);
+          if (index >= 0 && series[index].step === point.step) series[index] = point;
+          else series.splice(index < 0 ? series.length : index, 0, point);
+        }
+        if (series.length > MAX_POINTS_PER_METRIC) series.splice(0, series.length - MAX_POINTS_PER_METRIC);
+        run.metrics.set(String(name), series);
+        run.metricCount = Math.max(run.metricCount || 0, run.metrics.size);
+        run.updatedAt = point.time;
+      }
+
+      function applyPayload(rawPayload) {
+        if (Array.isArray(rawPayload)) {
+          rawPayload.forEach(applyPayload);
+          return;
+        }
+        const payload = unwrap(rawPayload);
+        if (!payload || typeof payload !== "object") return;
+        const type = String(payload.type ?? payload.event ?? "").toLowerCase();
+
+        if (type === "state" || type === "snapshot" || payload.runs) {
+          ingestSnapshot(payload);
+          return;
+        }
+
+        if (["run_deleted", "delete_run", "removed"].includes(type)) {
+          const id = String(payload.run_id ?? payload.runId ?? payload.id ?? "");
+          app.runs.delete(id);
+          if (app.selectedRunId === id) app.selectedRunId = null;
+          selectBestRun();
+          scheduleRender();
+          return;
+        }
+
+        if (payload.run && typeof payload.run === "object") {
+          mergeRun(normalizedRun(payload.run), false);
+        }
+
+        const runId = payload.run_id ?? payload.runId ?? payload.run?.id ?? payload.id ?? "default";
+        const run = ensureRun(runId, payload);
+        if (payload.run_name || payload.runName) run.name = String(payload.run_name ?? payload.runName);
+        if (payload.status) run.status = String(payload.status);
+        if (payload.started_at || payload.startedAt) run.startedAt = toTimestamp(payload.started_at ?? payload.startedAt);
+
+        const step = payload.step ?? payload.iteration ?? payload.epoch ?? payload.x;
+        const time = payload.timestamp ?? payload.time ?? payload.updated_at;
+        let appended = false;
+
+        if (payload.metrics && typeof payload.metrics === "object" && !Array.isArray(payload.metrics)) {
+          Object.entries(payload.metrics).forEach(([name, value]) => {
+            if (toFinite(value) != null) {
+              appendMetric(run, name, value, step, time);
+              appended = true;
+            } else {
+              const points = seriesFrom(value, time);
+              if (points.length) {
+                const combined = [...(run.metrics.get(name) || []), ...points];
+                run.metrics.set(name, dedupeAndSort(combined));
+                appended = true;
+              }
+            }
+          });
+        }
+
+        const metricName = payload.metric ?? payload.metric_name ?? payload.metricName;
+        if (metricName && payload.value != null) {
+          appendMetric(run, metricName, payload.value, step, time);
+          appended = true;
+        }
+
+        if (!appended && payload.values && typeof payload.values === "object") {
+          Object.entries(payload.values).forEach(([name, value]) => appendMetric(run, name, value, step, time));
+        }
+
+        if (time && !appended) run.updatedAt = toTimestamp(time) || run.updatedAt;
+        selectBestRun();
+        scheduleRender();
+      }
+
+      function selectBestRun(preferredId) {
+        if (preferredId != null && app.runs.has(String(preferredId))) app.selectedRunId = String(preferredId);
+        if (app.selectedRunId && app.runs.has(app.selectedRunId)) return;
+        const sorted = sortedRuns();
+        app.selectedRunId = sorted.length ? sorted[0].id : null;
+      }
+
+      function sortedRuns() {
+        return [...app.runs.values()].sort((a, b) => {
+          const statusDelta = (statusClass(a.status) === "running" ? 0 : 1) - (statusClass(b.status) === "running" ? 0 : 1);
+          if (statusDelta) return statusDelta;
+          const aTime = safeDate(a.updatedAt)?.getTime() || 0;
+          const bTime = safeDate(b.updatedAt)?.getTime() || 0;
+          return bTime - aTime || a.name.localeCompare(b.name, "zh-CN");
+        });
+      }
+
+      function scheduleRender() {
+        if (app.renderQueued) return;
+        app.renderQueued = true;
+        requestAnimationFrame(() => {
+          app.renderQueued = false;
+          render();
+        });
+      }
+
+      function render() {
+        renderRunList();
+        const run = app.selectedRunId ? app.runs.get(app.selectedRunId) : null;
+        dom.emptyState.hidden = Boolean(run);
+        dom.dashboard.hidden = !run;
+        dom.exportButton.disabled = !run;
+
+        if (!run) {
+          dom.runTitle.textContent = "训练指标";
+          dom.runId.textContent = app.fetchFailed ? "无法读取服务器状态" : "等待服务器数据";
+          dom.runStatus.hidden = true;
+          clearMetricCards();
+          return;
+        }
+
+        dom.runTitle.textContent = run.name;
+        dom.runId.textContent = `Run ID · ${run.id}`;
+        dom.runStatus.hidden = false;
+        dom.runStatus.className = `badge ${statusClass(run.status)}`;
+        dom.runStatus.textContent = statusLabel(run.status);
+        renderStats(run);
+        renderMetricCards(run);
+      }
+
+      function renderRunList() {
+        const runs = sortedRuns();
+        dom.runCount.textContent = String(runs.length);
+        dom.runList.replaceChildren();
+        if (!runs.length) {
+          const empty = document.createElement("div");
+          empty.className = "sidebar-empty";
+          empty.textContent = app.fetchFailed ? "暂时无法连接服务器" : "暂无训练运行";
+          dom.runList.append(empty);
+          return;
+        }
+        const fragment = document.createDocumentFragment();
+        runs.forEach((run) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `run-item${run.id === app.selectedRunId ? " active" : ""}`;
+          button.setAttribute("role", "option");
+          button.setAttribute("aria-selected", run.id === app.selectedRunId ? "true" : "false");
+          button.dataset.runId = run.id;
+
+          const dot = document.createElement("span");
+          dot.className = `run-dot ${statusClass(run.status)}`;
+          dot.setAttribute("aria-hidden", "true");
+          const copy = document.createElement("span");
+          copy.className = "run-copy";
+          const name = document.createElement("span");
+          name.className = "run-name";
+          name.textContent = run.name;
+          const meta = document.createElement("span");
+          meta.className = "run-meta";
+          meta.textContent = `${statusLabel(run.status)} · ${Math.max(run.metricCount || 0, run.metrics.size)} 项指标`;
+          copy.append(name, meta);
+          button.append(dot, copy);
+          fragment.append(button);
+        });
+        dom.runList.append(fragment);
+      }
+
+      function latestStep(run) {
+        let step = null;
+        run.metrics.forEach((points) => {
+          const candidate = points[points.length - 1]?.step;
+          if (candidate != null && (step == null || candidate > step)) step = candidate;
+        });
+        return step;
+      }
+
+      function renderStats(run) {
+        const step = latestStep(run);
+        dom.statStep.textContent = step == null ? "—" : formatStep(step);
+        dom.statMetrics.textContent = String(run.metrics.size);
+        dom.statDuration.textContent = formatDuration(run.startedAt, statusClass(run.status) === "running" ? new Date() : run.updatedAt);
+        dom.statUpdated.textContent = relativeTime(run.updatedAt);
+      }
+
+      function metricColor(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i += 1) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+        return palette[Math.abs(hash) % palette.length];
+      }
+
+      function createMetricCard(name) {
+        const card = document.createElement("article");
+        card.className = "metric-card";
+        card.dataset.metric = name;
+        const header = document.createElement("div");
+        header.className = "metric-card-header";
+        const valueBlock = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "metric-title";
+        const swatch = document.createElement("span");
+        swatch.className = "metric-swatch";
+        swatch.style.backgroundColor = metricColor(name);
+        const titleText = document.createElement("span");
+        titleText.className = "metric-name";
+        titleText.textContent = name;
+        titleText.title = name;
+        const current = document.createElement("div");
+        current.className = "metric-current";
+        title.append(swatch, titleText);
+        valueBlock.append(title, current);
+        const change = document.createElement("div");
+        change.className = "metric-change";
+        header.append(valueBlock, change);
+
+        const wrap = document.createElement("div");
+        wrap.className = "chart-wrap";
+        const canvas = document.createElement("canvas");
+        canvas.setAttribute("role", "img");
+        canvas.setAttribute("aria-label", `${name} 指标折线图`);
+        const tooltip = document.createElement("div");
+        tooltip.className = "chart-tooltip";
+        tooltip.hidden = true;
+        wrap.append(canvas, tooltip);
+        card.append(header, wrap);
+
+        const entry = { card, current, change, canvas, tooltip, geometry: null, name };
+        canvas.addEventListener("pointermove", (event) => showTooltip(entry, event));
+        canvas.addEventListener("pointerleave", () => { tooltip.hidden = true; });
+        resizeObserver.observe(canvas);
+        return entry;
+      }
+
+      function clearMetricCards() {
+        app.cards.forEach((entry) => resizeObserver.unobserve(entry.canvas));
+        app.cards.clear();
+        dom.chartGrid.replaceChildren();
+      }
+
+      function renderMetricCards(run) {
+        const names = [...run.metrics.keys()].filter((name) => run.metrics.get(name)?.length).sort((a, b) => a.localeCompare(b, "zh-CN", { numeric: true }));
+        dom.noMetrics.hidden = names.length > 0;
+        dom.chartGrid.hidden = names.length === 0;
+
+        app.cards.forEach((entry, name) => {
+          if (!names.includes(name)) {
+            resizeObserver.unobserve(entry.canvas);
+            entry.card.remove();
+            app.cards.delete(name);
+          }
+        });
+
+        names.forEach((name) => {
+          let entry = app.cards.get(name);
+          if (!entry) {
+            entry = createMetricCard(name);
+            app.cards.set(name, entry);
+          }
+          dom.chartGrid.append(entry.card);
+          const points = run.metrics.get(name);
+          const last = points[points.length - 1];
+          const previous = points[points.length - 2];
+          entry.current.textContent = formatValue(last.value);
+          entry.current.title = String(last.value);
+          if (previous) {
+            const delta = last.value - previous.value;
+            entry.change.textContent = `${delta > 0 ? "+" : ""}${formatValue(delta)} / 步`;
+          } else entry.change.textContent = `${points.length} 个点`;
+          drawChart(entry, points);
+        });
+      }
+
+      function smoothedValues(points, windowSize) {
+        if (windowSize <= 1) return points.map((point) => point.value);
+        const values = new Array(points.length);
+        let sum = 0;
+        for (let index = 0; index < points.length; index += 1) {
+          sum += points[index].value;
+          if (index >= windowSize) sum -= points[index - windowSize].value;
+          values[index] = sum / Math.min(index + 1, windowSize);
+        }
+        return values;
+      }
+
+      function drawChart(entry, allPoints) {
+        const canvas = entry.canvas;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const pixelWidth = Math.round(rect.width * dpr);
+        const pixelHeight = Math.round(rect.height * dpr);
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+          canvas.width = pixelWidth;
+          canvas.height = pixelHeight;
+        }
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        const points = app.autoFollow ? allPoints.slice(-FOLLOW_POINTS) : allPoints;
+        if (!points.length) return;
+        const styles = getComputedStyle(document.documentElement);
+        const gridColor = styles.getPropertyValue("--chart-grid").trim();
+        const labelColor = styles.getPropertyValue("--chart-label").trim();
+        const color = metricColor(entry.name);
+        const margin = { top: 8, right: 14, bottom: 27, left: 54 };
+        const plot = {
+          left: margin.left,
+          top: margin.top,
+          width: Math.max(1, rect.width - margin.left - margin.right),
+          height: Math.max(1, rect.height - margin.top - margin.bottom)
+        };
+
+        const smooth = smoothedValues(points, app.smoothing);
+        let minY = Math.min(...smooth);
+        let maxY = Math.max(...smooth);
+        if (app.smoothing > 1) {
+          minY = Math.min(minY, ...points.map((point) => point.value));
+          maxY = Math.max(maxY, ...points.map((point) => point.value));
+        }
+        if (minY === maxY) {
+          const padding = Math.abs(minY || 1) * .08;
+          minY -= padding;
+          maxY += padding;
+        } else {
+          const padding = (maxY - minY) * .08;
+          minY -= padding;
+          maxY += padding;
+        }
+        const minX = points[0].step;
+        const maxX = points[points.length - 1].step;
+        const xSpan = maxX - minX || 1;
+        const ySpan = maxY - minY || 1;
+        const xFor = (step) => plot.left + ((step - minX) / xSpan) * plot.width;
+        const yFor = (value) => plot.top + (1 - (value - minY) / ySpan) * plot.height;
+
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = gridColor;
+        ctx.fillStyle = labelColor;
+        ctx.font = "10px ui-sans-serif, system-ui, sans-serif";
+        ctx.textBaseline = "middle";
+        for (let index = 0; index <= 3; index += 1) {
+          const ratio = index / 3;
+          const y = plot.top + ratio * plot.height;
+          const value = maxY - ratio * ySpan;
+          ctx.beginPath();
+          ctx.moveTo(plot.left, Math.round(y) + .5);
+          ctx.lineTo(plot.left + plot.width, Math.round(y) + .5);
+          ctx.stroke();
+          ctx.textAlign = "right";
+          ctx.fillText(formatAxis(value), plot.left - 8, y);
+        }
+
+        ctx.textBaseline = "top";
+        [0, .5, 1].forEach((ratio) => {
+          const x = plot.left + ratio * plot.width;
+          const step = minX + ratio * xSpan;
+          ctx.textAlign = ratio === 0 ? "left" : ratio === 1 ? "right" : "center";
+          ctx.fillText(formatStep(step), x, plot.top + plot.height + 9);
+        });
+
+        const drawLine = (values, alpha, width) => {
+          const maxSegments = Math.max(1, Math.floor(plot.width * 1.5));
+          const stride = Math.max(1, Math.floor(points.length / maxSegments));
+          ctx.beginPath();
+          let started = false;
+          for (let index = 0; index < points.length; index += stride) {
+            const x = xFor(points[index].step);
+            const y = yFor(values[index]);
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+          }
+          const lastIndex = points.length - 1;
+          if ((lastIndex % stride) !== 0) ctx.lineTo(xFor(points[lastIndex].step), yFor(values[lastIndex]));
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        };
+
+        if (app.smoothing > 1) drawLine(points.map((point) => point.value), .22, 1.25);
+        drawLine(smooth, 1, 2);
+
+        const lastIndex = points.length - 1;
+        const lastX = xFor(points[lastIndex].step);
+        const lastY = yFor(smooth[lastIndex]);
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 6, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = .22;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        entry.geometry = { points, smooth, plot, minX, maxX, xFor, yFor };
+      }
+
+      function showTooltip(entry, event) {
+        const geometry = entry.geometry;
+        if (!geometry || !geometry.points.length) return;
+        const rect = entry.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const { points, smooth, plot, minX, maxX } = geometry;
+        if (x < plot.left - 8 || x > plot.left + plot.width + 8) {
+          entry.tooltip.hidden = true;
+          return;
+        }
+        const targetStep = minX + ((x - plot.left) / plot.width) * (maxX - minX || 1);
+        let low = 0;
+        let high = points.length - 1;
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2);
+          if (points[middle].step < targetStep) low = middle + 1;
+          else high = middle;
+        }
+        let index = low;
+        if (index > 0 && Math.abs(points[index - 1].step - targetStep) < Math.abs(points[index].step - targetStep)) index -= 1;
+        const point = points[index];
+        const tooltipX = geometry.xFor(point.step);
+        const tooltipY = geometry.yFor(smooth[index]);
+        const time = point.time ? new Date(point.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
+        entry.tooltip.replaceChildren();
+        const value = document.createElement("div");
+        value.className = "tooltip-value";
+        value.textContent = formatValue(point.value);
+        const step = document.createElement("div");
+        step.className = "tooltip-muted";
+        step.textContent = `step ${formatStep(point.step)}${time ? ` · ${time}` : ""}`;
+        entry.tooltip.append(value, step);
+        if (app.smoothing > 1) {
+          const smoothValue = document.createElement("div");
+          smoothValue.className = "tooltip-muted";
+          smoothValue.textContent = `平滑 ${formatValue(smooth[index])}`;
+          entry.tooltip.append(smoothValue);
+        }
+        entry.tooltip.hidden = false;
+        const tooltipWidth = entry.tooltip.offsetWidth;
+        const placeLeft = tooltipX + tooltipWidth + 24 > rect.width;
+        entry.tooltip.style.left = `${tooltipX}px`;
+        entry.tooltip.style.top = `${Math.max(16, Math.min(rect.height - 16, tooltipY))}px`;
+        entry.tooltip.style.transform = placeLeft ? "translate(calc(-100% - 10px), -50%)" : "translate(10px, -50%)";
+      }
+
+      function formatValue(value) {
+        if (!Number.isFinite(value)) return "—";
+        const absolute = Math.abs(value);
+        if (absolute !== 0 && (absolute >= 1e6 || absolute < 1e-4)) return value.toExponential(3);
+        if (absolute >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (absolute >= 10) return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+        return value.toLocaleString(undefined, { maximumFractionDigits: 5 });
+      }
+
+      function formatAxis(value) {
+        const absolute = Math.abs(value);
+        if (absolute >= 1e6) return `${(value / 1e6).toFixed(1)}m`;
+        if (absolute >= 1e3) return `${(value / 1e3).toFixed(1)}k`;
+        if (absolute > 0 && absolute < .001) return value.toExponential(1);
+        return Number(value.toPrecision(3)).toString();
+      }
+
+      function formatStep(step) {
+        if (!Number.isFinite(step)) return "—";
+        if (Number.isInteger(step)) return step.toLocaleString();
+        return Number(step.toFixed(3)).toLocaleString();
+      }
+
+      function formatDuration(startValue, endValue) {
+        const start = safeDate(startValue);
+        const end = safeDate(endValue);
+        if (!start || !end) return "—";
+        let seconds = Math.max(0, Math.floor((end - start) / 1000));
+        const days = Math.floor(seconds / 86400);
+        seconds %= 86400;
+        const hours = Math.floor(seconds / 3600);
+        seconds %= 3600;
+        const minutes = Math.floor(seconds / 60);
+        if (days) return `${days}天 ${hours}小时`;
+        if (hours) return `${hours}小时 ${minutes}分`;
+        if (minutes) return `${minutes}分 ${seconds % 60}秒`;
+        return `${seconds}秒`;
+      }
+
+      function relativeTime(value) {
+        const date = safeDate(value);
+        if (!date) return "—";
+        const seconds = Math.round((Date.now() - date.getTime()) / 1000);
+        if (Math.abs(seconds) < 5) return "刚刚";
+        if (seconds < 60) return `${Math.max(1, seconds)} 秒前`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`;
+        return date.toLocaleDateString();
+      }
+
+      function setConnection(state, text) {
+        dom.connection.className = `connection ${state}`;
+        dom.connectionText.textContent = text;
+        dom.connection.title = text;
+      }
+
+      function handleEvent(event) {
+        if (!event.data) return;
+        let payload;
+        try { payload = JSON.parse(event.data); }
+        catch (error) {
+          console.warn("ScalarPulse ignored a non-JSON SSE event", error);
+          return;
+        }
+        app.lastEventAt = new Date();
+        if (app.paused) {
+          app.pending.push(payload);
+          if (app.pending.length > MAX_PAUSED_EVENTS) app.pending.splice(0, app.pending.length - MAX_PAUSED_EVENTS);
+          setConnection("paused", `已暂停 · 缓冲 ${app.pending.length}`);
+          return;
+        }
+        applyPayload(payload);
+      }
+
+      function connectEvents() {
+        clearTimeout(app.reconnectTimer);
+        if (app.source) app.source.close();
+        setConnection("connecting", "连接中");
+        const source = new EventSource(API_EVENTS);
+        app.source = source;
+        source.onopen = () => {
+          app.reconnectAttempt = 0;
+          setConnection(app.paused ? "paused" : "live", app.paused ? "已暂停" : "实时连接");
+          // SSE is intentionally a live-only stream. Refreshing the persisted
+          // snapshot on every reconnect fills any gap from the offline window.
+          loadSnapshot(app.selectedRunId);
+        };
+        source.onmessage = handleEvent;
+        ["metric", "metrics", "run", "state", "snapshot", "status", "reset", "done"].forEach((type) => source.addEventListener(type, handleEvent));
+        source.onerror = () => {
+          source.close();
+          if (app.source !== source) return;
+          setConnection("offline", "连接断开");
+          const delay = Math.min(30000, 1000 * (2 ** app.reconnectAttempt));
+          app.reconnectAttempt = Math.min(app.reconnectAttempt + 1, 5);
+          app.reconnectTimer = setTimeout(connectEvents, delay);
+        };
+      }
+
+      async function loadSnapshot(runId = null) {
+        try {
+          const url = runId == null ? API_STATE : `${API_STATE}?run_id=${encodeURIComponent(runId)}`;
+          const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          app.fetchFailed = false;
+          ingestSnapshot(payload);
+        } catch (error) {
+          app.fetchFailed = true;
+          dom.emptyTitle.textContent = "暂时无法读取训练状态";
+          dom.emptyCopy.textContent = "页面会继续尝试接收实时事件，请确认服务端已启动。";
+          console.warn("ScalarPulse state request failed", error);
+          scheduleRender();
+        }
+      }
+
+      function togglePause() {
+        app.paused = !app.paused;
+        dom.pauseButton.classList.toggle("paused", app.paused);
+        dom.pauseLabel.textContent = app.paused ? "继续" : "暂停";
+        dom.pauseButton.setAttribute("aria-label", app.paused ? "继续实时显示" : "暂停实时显示");
+        dom.pauseIcon.innerHTML = app.paused ? '<path d="m8 5 11 7-11 7Z"/>' : '<path d="M8 5v14M16 5v14"/>';
+        if (app.paused) {
+          setConnection("paused", "已暂停");
+          showToast("显示已暂停；实时事件会暂存在浏览器中。", 2600);
+        } else {
+          const queued = app.pending.splice(0);
+          queued.forEach(applyPayload);
+          setConnection(app.source?.readyState === EventSource.OPEN ? "live" : "connecting", app.source?.readyState === EventSource.OPEN ? "实时连接" : "连接中");
+          showToast(queued.length ? `已补齐 ${queued.length} 条缓冲事件。` : "已继续实时更新。", 2200);
+          scheduleRender();
+        }
+      }
+
+      function csvEscape(value) {
+        const text = value == null ? "" : String(value);
+        return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+      }
+
+      function exportCsv() {
+        const run = app.selectedRunId ? app.runs.get(app.selectedRunId) : null;
+        if (!run || !run.metrics.size) {
+          showToast("当前运行还没有可导出的指标。", 2400);
+          return;
+        }
+        const metricNames = [...run.metrics.keys()].sort((a, b) => a.localeCompare(b, "zh-CN", { numeric: true }));
+        const rows = new Map();
+        run.metrics.forEach((points, metricName) => {
+          points.forEach((point) => {
+            const key = String(point.step);
+            if (!rows.has(key)) rows.set(key, { step: point.step, timestamp: point.time || "", values: {} });
+            const row = rows.get(key);
+            if (!row.timestamp && point.time) row.timestamp = point.time;
+            row.values[metricName] = point.value;
+          });
+        });
+        const lines = [
+          ["run_id", "run_name", "step", "timestamp", ...metricNames].map(csvEscape).join(",")
+        ];
+        [...rows.values()].sort((a, b) => a.step - b.step).forEach((row) => {
+          lines.push([run.id, run.name, row.step, row.timestamp, ...metricNames.map((name) => row.values[name] ?? "")].map(csvEscape).join(","));
+        });
+        const blob = new Blob(["\ufeff", lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        const safeName = run.name.replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 60) || "run";
+        anchor.href = url;
+        anchor.download = `${safeName}_metrics.csv`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        showToast(`已导出 ${rows.size} 行指标数据。`, 2200);
+      }
+
+      function showToast(message, duration = 2200) {
+        clearTimeout(app.toastTimer);
+        dom.toast.textContent = message;
+        dom.toast.hidden = false;
+        app.toastTimer = setTimeout(() => { dom.toast.hidden = true; }, duration);
+      }
+
+      function currentTheme() {
+        return document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      }
+
+      function applyTheme(theme, persist = false) {
+        document.documentElement.dataset.theme = theme;
+        dom.themeIcon.innerHTML = theme === "dark"
+          ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>'
+          : '<path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/>';
+        dom.themeButton.setAttribute("aria-label", theme === "dark" ? "切换到浅色" : "切换到深色");
+        dom.themeButton.title = theme === "dark" ? "切换到浅色" : "切换到深色";
+        if (persist) localStorage.setItem("scalarpulse-theme", theme);
+        scheduleRender();
+      }
+
+      const resizeObserver = new ResizeObserver((entries) => {
+        const run = app.selectedRunId ? app.runs.get(app.selectedRunId) : null;
+        if (!run) return;
+        entries.forEach(({ target }) => {
+          const name = target.closest(".metric-card")?.dataset.metric;
+          const entry = name ? app.cards.get(name) : null;
+          if (entry && run.metrics.has(name)) drawChart(entry, run.metrics.get(name));
+        });
+      });
+
+      dom.runList.addEventListener("click", (event) => {
+        const button = event.target.closest(".run-item");
+        if (!button) return;
+        app.selectedRunId = button.dataset.runId;
+        scheduleRender();
+        loadSnapshot(app.selectedRunId);
+      });
+
+      dom.smoothing.value = String(app.smoothing);
+      dom.smoothingValue.textContent = app.smoothing === 1 ? "原始" : `${app.smoothing} 点`;
+      dom.smoothing.addEventListener("input", () => {
+        app.smoothing = Number(dom.smoothing.value);
+        dom.smoothingValue.textContent = app.smoothing === 1 ? "原始" : `${app.smoothing} 点`;
+        localStorage.setItem("scalarpulse-smoothing", String(app.smoothing));
+        scheduleRender();
+      });
+
+      dom.autoFollow.checked = app.autoFollow;
+      dom.chartHint.textContent = app.autoFollow ? `显示最近 ${FOLLOW_POINTS} 个点 · 悬停查看详情` : "显示全部数据 · 悬停查看详情";
+      dom.autoFollow.addEventListener("change", () => {
+        app.autoFollow = dom.autoFollow.checked;
+        localStorage.setItem("scalarpulse-follow", String(app.autoFollow));
+        dom.chartHint.textContent = app.autoFollow ? `显示最近 ${FOLLOW_POINTS} 个点 · 悬停查看详情` : "显示全部数据 · 悬停查看详情";
+        scheduleRender();
+      });
+
+      dom.pauseButton.addEventListener("click", togglePause);
+      dom.exportButton.addEventListener("click", exportCsv);
+      dom.themeButton.addEventListener("click", () => applyTheme(currentTheme() === "dark" ? "light" : "dark", true));
+
+      const savedTheme = localStorage.getItem("scalarpulse-theme");
+      applyTheme(savedTheme === "light" || savedTheme === "dark" ? savedTheme : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+      matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
+        if (!localStorage.getItem("scalarpulse-theme")) applyTheme(event.matches ? "dark" : "light");
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (app.source) app.source.close();
+        clearTimeout(app.reconnectTimer);
+      });
+
+      setInterval(() => {
+        const run = app.selectedRunId ? app.runs.get(app.selectedRunId) : null;
+        if (run) renderStats(run);
+      }, 1000);
+
+      loadSnapshot();
+      connectEvents();
+    })();
+  </script>
+</body>
+</html>

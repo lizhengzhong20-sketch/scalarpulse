@@ -1,0 +1,54 @@
+name: Feature request
+description: Suggest a focused improvement for ScalarPulse.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. A clear use case helps us understand the
+        smallest useful change.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a similar proposal.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish, and what is difficult today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or API you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternative designs have you tried?
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example usage
+      description: Show what the feature could look like from a user's perspective.
+      render: python
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mockups, links, or implementation notes here.
