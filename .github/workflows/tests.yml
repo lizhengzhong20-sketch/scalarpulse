@@ -65,6 +65,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/scalarpulse-smoke/bin/python" -c "import importlib.metadata; import scalarpulse; print(importlib.metadata.version('scalarpulse'))"
+          "$RUNNER_TEMP/scalarpulse-smoke/bin/python" -m scalarpulse --version
           "$RUNNER_TEMP/scalarpulse-smoke/bin/scalarpulse" --version
           "$RUNNER_TEMP/scalarpulse-smoke/bin/scalarpulse" --help
 
