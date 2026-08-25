@@ -7,15 +7,16 @@
 给它一个数，它就还你一条实时曲线。
 
 [![CI](https://github.com/lizhengzhong20-sketch/scalarpulse/actions/workflows/tests.yml/badge.svg)](https://github.com/lizhengzhong20-sketch/scalarpulse/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/scalarpulse?color=3776AB&logo=pypi&logoColor=white)](https://pypi.org/project/scalarpulse/)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-6366f1.svg)](#项目边界)
 
-[English](README.en.md) · [30 秒体验](#30-秒体验) · [适用场景](#哪些模型和算法可以用) · [安全说明](SECURITY.md)
+[English](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/README.en.md) · [30 秒体验](#30-秒体验) · [适用场景](#哪些模型和算法可以用) · [安全说明](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/SECURITY.md)
 
 </div>
 
-![代表 ScalarPulse 的脉冲与训练曲线](assets/scalarpulse-banner.png)
+![代表 ScalarPulse 的脉冲与训练曲线](https://raw.githubusercontent.com/lizhengzhong20-sketch/scalarpulse/main/assets/scalarpulse-banner.png)
 
 ScalarPulse 是一个轻量、本地优先的 Python 训练指标看板。它把 loss、F1、学习率、梯度范数、延迟、Token 用量以及任何有限标量实时画进浏览器，并把每次实验保存成可读的 JSONL 文件。
 
@@ -23,7 +24,7 @@ ScalarPulse 是一个轻量、本地优先的 Python 训练指标看板。它把
 
 ## 先看效果
 
-![ScalarPulse 实时展示 loss、准确率、学习率和吞吐量曲线](assets/dashboard.jpg)
+![ScalarPulse 实时展示 loss、准确率、学习率和吞吐量曲线](https://raw.githubusercontent.com/lizhengzhong20-sketch/scalarpulse/main/assets/dashboard.jpg)
 
 一个页面里可以查看运行状态、最新 step、指标数量和持续时间；切换历史 run、平滑曲线、暂停实时刷新、悬停读数、切换明暗主题，并导出当前 run 的 CSV。
 
@@ -37,14 +38,16 @@ ScalarPulse 是一个轻量、本地优先的 Python 训练指标看板。它把
 
 ## 30 秒体验
 
-需要 Python 3.10 或更高版本。当前文档建议直接从 GitHub 安装：
+需要 Python 3.10 或更高版本：
 
 ```bash
-python -m pip install "git+https://github.com/lizhengzhong20-sketch/scalarpulse.git"
-scalarpulse demo --open
+python -m pip install scalarpulse
+python -m scalarpulse demo --open
 ```
 
 命令会生成一段模拟训练数据，并打开本地看板，默认地址为 `http://127.0.0.1:8765`。演示完成后看板会继续运行，按 `Ctrl+C` 退出。
+
+如果终端能够直接找到 Python 安装目录里的脚本，也可以把第二行简写为 `scalarpulse demo --open`。使用 `python -m scalarpulse` 在 Windows 和虚拟环境中通常更稳妥。
 
 ## 接入一个训练循环
 
@@ -238,7 +241,7 @@ scalarpulse demo  [--steps N] [--interval SECONDS] [同样的服务参数]
 
 ScalarPulse 默认只监听 `127.0.0.1`，并且**没有身份验证**。不要把服务直接暴露到不可信网络；如需绑定 `0.0.0.0`，请仅在可信网络中使用，或放在带身份验证的反向代理之后。
 
-`config` 会被保存在本地，并可由看板 API 返回。不要在其中写入密码、Token、API Key 或其他敏感数据。更多说明见 [SECURITY.md](SECURITY.md)。
+`config` 会被保存在本地，并可由看板 API 返回。不要在其中写入密码、Token、API Key 或其他敏感数据。更多说明见 [SECURITY.md](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/SECURITY.md)。
 
 ## 项目边界
 
@@ -262,11 +265,11 @@ python -m pytest
 python -m build
 ```
 
-欢迎提交 Issue 或功能建议，也可以阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 参与开发。
+欢迎提交 Issue 或功能建议，也可以阅读 [CONTRIBUTING.md](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/CONTRIBUTING.md) 参与开发。
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/LICENSE)
 
 ---
 

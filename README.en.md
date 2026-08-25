@@ -5,17 +5,18 @@
 **A tiny, dependency-free live dashboard for model-training metrics.**
 
 [![CI](https://github.com/lizhengzhong20-sketch/scalarpulse/actions/workflows/tests.yml/badge.svg)](https://github.com/lizhengzhong20-sketch/scalarpulse/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/scalarpulse?color=3776AB&logo=pypi&logoColor=white)](https://pypi.org/project/scalarpulse/)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-6366f1.svg)](#project-status)
 
-[简体中文](README.md)
+[简体中文](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/README.md)
 
 </div>
 
-![Abstract pulse and training curves representing ScalarPulse](assets/scalarpulse-banner.png)
+![Abstract pulse and training curves representing ScalarPulse](https://raw.githubusercontent.com/lizhengzhong20-sketch/scalarpulse/main/assets/scalarpulse-banner.png)
 
-![ScalarPulse dashboard showing live loss, accuracy, learning rate, and throughput curves](assets/dashboard.jpg)
+![ScalarPulse dashboard showing live loss, accuracy, learning rate, and throughput curves](https://raw.githubusercontent.com/lizhengzhong20-sketch/scalarpulse/main/assets/dashboard.jpg)
 
 ScalarPulse lets you watch loss, accuracy, learning rate, gradient norm, throughput, and any other scalar while a model is training. It stores runs as readable JSONL files and streams updates to a local browser dashboard over SSE.
 
@@ -29,16 +30,16 @@ ScalarPulse lets you watch loss, accuracy, learning rate, gradient norm, through
 
 ## Quick start
 
-Install the current GitHub version:
+ScalarPulse requires Python 3.10 or newer:
 
 ```bash
-python -m pip install "git+https://github.com/lizhengzhong20-sketch/scalarpulse.git"
-scalarpulse demo --open
+python -m pip install scalarpulse
+python -m scalarpulse demo --open
 ```
 
 Then open the address printed in the terminal, normally `http://127.0.0.1:8765`.
 
-> **Pre-release note:** For now, this documentation recommends installing the current version directly from this repository.
+If your terminal can find Python's scripts directory, the second command can be shortened to `scalarpulse demo --open`. The module form is generally more reliable on Windows and inside virtual environments.
 
 ## Add it to a training loop
 
@@ -156,7 +157,7 @@ One JSONL line represents one `log()` call. The format is append-friendly, human
 
 ScalarPulse listens on `127.0.0.1` by default and has no authentication. Do not expose it directly to an untrusted network. If you bind to `0.0.0.0`, place it behind an authenticated reverse proxy or use it only on a trusted network. Values passed in `config` are stored locally and are visible through the dashboard API, so never put passwords or tokens there.
 
-See [SECURITY.md](SECURITY.md) for details.
+See [SECURITY.md](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/SECURITY.md) for details.
 
 ## Project status
 
@@ -172,8 +173,8 @@ python -m pytest
 python -m build
 ```
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), open a bug report, or propose a feature.
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/CONTRIBUTING.md), open a bug report, or propose a feature.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/LICENSE)
