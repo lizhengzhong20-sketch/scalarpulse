@@ -60,9 +60,7 @@ class LogWatcher(threading.Thread):
         self.broker = broker
         self.stop_event = stop_event
         self._positions: dict[Path, int] = {}
-        self._metric_mtimes: dict[Path, int] = {}
         self._metric_tails: dict[Path, bytes] = {}
-        self._meta_mtimes: dict[Path, int] = {}
         self._meta_signatures: dict[Path, bytes] = {}
         self._buffers: dict[Path, bytes] = {}
         self._snapshot_existing_files()
@@ -72,13 +70,11 @@ class LogWatcher(threading.Thread):
             try:
                 stat = path.stat()
                 self._positions[path] = stat.st_size
-                self._metric_mtimes[path] = stat.st_mtime_ns
                 self._metric_tails[path] = self._tail_bytes(path, stat.st_size)
             except OSError:
                 pass
         for path in self.store.log_dir.glob("*/meta.json"):
             try:
-                self._meta_mtimes[path] = path.stat().st_mtime_ns
                 self._meta_signatures[path] = self._file_signature(path)
             except OSError:
                 pass
@@ -96,7 +92,6 @@ class LogWatcher(threading.Thread):
                 if self._meta_signatures.get(path) == signature:
                     continue
                 metadata = json.loads(raw.decode("utf-8"))
-                self._meta_mtimes[path] = path.stat().st_mtime_ns
                 self._meta_signatures[path] = signature
                 self.broker.publish("run", metadata)
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
@@ -108,8 +103,6 @@ class LogWatcher(threading.Thread):
                 position = self._positions.get(path, 0)
                 stat = path.stat()
                 size = stat.st_size
-                previous_mtime = self._metric_mtimes.get(path)
-                self._metric_mtimes[path] = stat.st_mtime_ns
                 current_tail = self._tail_bytes(path, size)
                 previous_tail = self._metric_tails.get(path, b"")
                 prefix_was_rewritten = (
