@@ -51,7 +51,11 @@ def flatten_metrics(metrics: Mapping[str, Any], prefix: str = "") -> dict[str, i
             raise ValueError("metric names cannot be empty")
         full_name = f"{prefix}/{name}" if prefix else name
         if isinstance(value, Mapping):
-            flattened.update(flatten_metrics(value, full_name))
+            items = flatten_metrics(value, full_name)
         else:
-            flattened[full_name] = to_scalar(value, name=full_name)
+            items = {full_name: to_scalar(value, name=full_name)}
+        for key, scalar in items.items():
+            if key in flattened:
+                raise ValueError(f"duplicate metric name: {key}")
+            flattened[key] = scalar
     return flattened

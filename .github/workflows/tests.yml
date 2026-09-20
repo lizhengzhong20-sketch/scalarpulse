@@ -36,6 +36,14 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Set up Node for dashboard tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Test dashboard state and recovery
+        run: node --test tests/dashboard.test.cjs
+
   package-smoke:
     name: Build and verify wheel
     needs: tests
@@ -68,6 +76,7 @@ jobs:
           "$RUNNER_TEMP/scalarpulse-smoke/bin/python" -m scalarpulse --version
           "$RUNNER_TEMP/scalarpulse-smoke/bin/scalarpulse" --version
           "$RUNNER_TEMP/scalarpulse-smoke/bin/scalarpulse" --help
+          "$RUNNER_TEMP/scalarpulse-smoke/bin/python" "$GITHUB_WORKSPACE/tests/package_smoke.py"
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4

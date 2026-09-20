@@ -38,16 +38,19 @@ class EventBroker:
 
     def publish(self, event: str, data: dict[str, Any]) -> None:
         with self._lock:
-            subscribers = tuple(self._subscribers)
-        for events in subscribers:
-            try:
-                events.put_nowait((event, data))
-            except queue.Full:
+            for events in self._subscribers:
                 try:
-                    events.get_nowait()
                     events.put_nowait((event, data))
-                except (queue.Empty, queue.Full):
-                    pass
+                except queue.Full:
+                    # A live-only stream cannot silently discard history. Invalidate
+                    # this subscriber's cache and let it fetch persisted state.
+                    while True:
+                        try:
+                            events.get_nowait()
+                        except queue.Empty:
+                            break
+                    events.put_nowait(("reset", {"reason": "overflow"}))
+                    events.put_nowait((event, data))
 
     def close(self) -> None:
         self.publish("__close__", {})
@@ -119,7 +122,7 @@ class LogWatcher(threading.Thread):
                     continue
                 with path.open("rb") as stream:
                     stream.seek(position)
-                    chunk = stream.read()
+                    chunk = stream.read(size - position)
                     self._positions[path] = stream.tell()
                 data = self._buffers.pop(path, b"") + chunk
                 self._metric_tails[path] = current_tail

@@ -81,4 +81,4 @@ def test_cli_version(capsys):
         cli.main(["--version"])
 
     assert exit_info.value.code == 0
-    assert capsys.readouterr().out.strip() == "scalarpulse 0.1.0"
+    assert capsys.readouterr().out.strip() == "scalarpulse 0.1.1"

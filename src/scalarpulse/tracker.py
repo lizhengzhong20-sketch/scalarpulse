@@ -86,10 +86,6 @@ class Tracker:
         with self._lock:
             self._ensure_open()
             actual_step = self._step if step is None else _validate_step(step)
-            if step is None:
-                self._step += 1
-            else:
-                self._step = max(self._step, actual_step + 1)
             record = {
                 "run_id": self.id,
                 "seq": self._seq,
@@ -97,9 +93,10 @@ class Tracker:
                 "time": time.time(),
                 "metrics": flattened,
             }
+            self.store.append(self.id, record)
+            self._step = max(self._step, actual_step + 1)
             self._seq += 1
             self._summary.update(flattened)
-            self.store.append(self.id, record)
 
     def finish(self, status: str = "completed") -> None:
         allowed = {"completed", "failed", "stopped"}
