@@ -57,7 +57,7 @@ def test_http_health_and_state_return_json_and_honor_record_limit(tmp_path):
     assert not handle.watcher.is_alive()
 
 
-def test_event_broker_broadcasts_and_drops_oldest_for_slow_subscribers():
+def test_event_broker_broadcasts_and_resets_slow_subscribers():
     broker = EventBroker()
     first = broker.subscribe()
     second = broker.subscribe()
@@ -69,8 +69,7 @@ def test_event_broker_broadcasts_and_drops_oldest_for_slow_subscribers():
     for seq in range(1025):
         broker.publish("metric", {"seq": seq})
 
-    assert first.qsize() == 1024
-    assert first.get_nowait() == ("metric", {"seq": 1})
+    assert first.get_nowait() == ("reset", {"reason": "overflow"})
     last = None
     while not first.empty():
         last = first.get_nowait()
@@ -82,6 +81,44 @@ def test_event_broker_broadcasts_and_drops_oldest_for_slow_subscribers():
     broker.publish("run", {"id": "new"})
     with pytest.raises(queue.Empty):
         second.get_nowait()
+
+
+def test_overflow_does_not_reset_fast_subscriber():
+    broker = EventBroker()
+    slow, fast = broker.subscribe(), broker.subscribe()
+    for seq in range(2200):
+        broker.publish("metric", {"seq": seq})
+        assert fast.get_nowait() == ("metric", {"seq": seq})
+    assert slow.get_nowait()[0] == "reset"
+
+
+def test_watcher_append_during_scan_does_not_replay_history(tmp_path, monkeypatch):
+    store = RunStore(tmp_path)
+    store.create_run({"id": "run"})
+    def append(seq):
+        store.append("run", {"run_id": "run", "seq": seq, "metrics": {"loss": seq}})
+    append(0)
+    broker = EventBroker()
+    events = broker.subscribe()
+    watcher = LogWatcher(store, broker, threading.Event())
+    append(1)
+    original = watcher._tail_bytes
+    injected = False
+    def tail_then_append(path, size, limit=128):
+        nonlocal injected
+        result = original(path, size, limit)
+        if not injected:
+            injected = True
+            append(2)
+        return result
+    monkeypatch.setattr(watcher, "_tail_bytes", tail_then_append)
+    watcher._scan_metrics()
+    watcher._scan_metrics()
+    watcher._scan_metrics()
+    received = []
+    while not events.empty():
+        received.append(events.get_nowait()[1]["seq"])
+    assert received == [1, 2]
 
 
 def test_sse_frames_unicode_json_and_unsubscribes_after_disconnect():

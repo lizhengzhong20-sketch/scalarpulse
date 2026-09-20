@@ -214,6 +214,8 @@ run.stop_dashboard()
 
 省略 `step` 时会从 `0` 开始自动递增。也可以把 run 当作上下文管理器使用；代码块抛出异常时会自动标记为 `failed`。
 
+嵌套指标使用 `/` 展开，例如 `{"train": {"loss": 0.5}}` 对应 `train/loss`。同一次 `log()` 中展开后重名会抛出 `ValueError`，不会静默覆盖或写入部分指标。追加失败时不推进序号、步数和摘要；遇到磁盘异常仍需检查日志完整性后再决定重试。
+
 </details>
 
 <details>
@@ -234,6 +236,8 @@ scalarpulse demo  [--steps N] [--interval SECONDS] [同样的服务参数]
 ```
 
 每次 `log()` 写入一行 JSONL。格式便于追加、人工阅读，也容易交给 pandas 处理；读取时会忽略意外损坏的最后一行。指标 API 默认最多返回 `20,000` 条记录，单次请求上限为 `100,000` 条。
+
+有条数限制的历史读取采用流式采样，避免先把整个日志装进内存；仍需扫描日志，不是索引查询。推送或暂停缓冲出现缺口时，看板会重新同步持久化历史，失败后重试。历史可能被采样，CSV 导出的是当前看板保留的数据，不保证包含完整原始记录；完整数据请读取 `metrics.jsonl`。
 
 </details>
 
@@ -262,8 +266,11 @@ git clone https://github.com/lizhengzhong20-sketch/scalarpulse.git
 cd scalarpulse
 python -m pip install -e ".[dev]"
 python -m pytest
+node --test tests/dashboard.test.cjs
 python -m build
 ```
+
+Node.js 22+ 只用于开发时的前端回归测试，安装和使用 ScalarPulse 不需要 Node.js。发布工作流会先执行 Python/前端测试，再验证分发包与干净环境安装；任一步失败都会阻止上传 PyPI。
 
 欢迎提交 Issue 或功能建议，也可以阅读 [CONTRIBUTING.md](https://github.com/lizhengzhong20-sketch/scalarpulse/blob/main/CONTRIBUTING.md) 参与开发。
 

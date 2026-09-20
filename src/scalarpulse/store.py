@@ -5,6 +5,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Any
+from collections import Counter
 
 from ._util import safe_id, utc_now
 
@@ -92,9 +93,15 @@ class RunStore:
         known_ids = {run["id"] for run in runs}
         selected_id = run_id if run_id in known_ids else (runs[0]["id"] if runs else None)
         selected = next((run for run in runs if run["id"] == selected_id), None)
-        records = self.records(selected_id) if selected_id else []
-        if max_records > 0 and len(records) > max_records:
-            records = _metric_aware_sample(records, max_records)
+        records = []
+        if selected_id:
+            if max_records <= 0:
+                records = self.records(selected_id)
+            else:
+                path = self._run_dir(selected_id) / "metrics.jsonl"
+                if path.exists():
+                    with path.open("rb") as stream:
+                        records = _sample_stream(stream, os.fstat(stream.fileno()).st_size, max_records)
         return {
             "runs": runs,
             "selected_run_id": selected_id,
@@ -122,48 +129,66 @@ def _evenly_sample(records: list[dict[str, Any]], limit: int) -> list[dict[str, 
     return [records[index] for index in sorted(indices)]
 
 
-def _metric_aware_sample(records: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    """Sample each metric across its own full step range within a global record budget."""
-    if len(records) <= limit:
-        return records
-    if limit <= 0:
-        return []
-
-    metric_indices: dict[str, list[int]] = {}
-    for index, record in enumerate(records):
-        metrics = record.get("metrics")
-        if not isinstance(metrics, dict):
+def _stream_records(stream, size: int):
+    """Rewind a fixed byte snapshot, ignoring incomplete/non-object records."""
+    stream.seek(0)
+    while stream.tell() < size:
+        line = stream.readline(size - stream.tell())
+        if not line or not line.endswith(b"\n"):
+            break
+        try:
+            record = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
             continue
-        for name in metrics:
-            metric_indices.setdefault(str(name), []).append(index)
-    if not metric_indices:
-        return _evenly_sample(records, limit)
+        if isinstance(record, dict):
+            yield record
 
+
+def _pick_positions(count: int, limit: int) -> set[int]:
+    if count <= 0 or limit <= 0:
+        return set()
+    if count <= limit:
+        return set(range(count))
+    if limit == 1:
+        return {count - 1}
+    return {round(i * (count - 1) / (limit - 1)) for i in range(limit)}
+
+
+def _metric_names(record):
+    metrics = record.get("metrics")
+    return metrics.keys() if isinstance(metrics, dict) else ()
+
+
+def _sample_stream(stream, size: int, limit: int) -> list[dict[str, Any]]:
+    """Three passes, O(limit + metric count) retained state; no full log list."""
+    counts: Counter[str] = Counter()
+    total = 0
+    for record in _stream_records(stream, size):
+        total += 1
+        counts.update(_metric_names(record))
+    if total <= limit:
+        return list(_stream_records(stream, size))
+    targets = {}
+    if counts:
+        quota, remainder = divmod(limit, len(counts))
+        targets = {name: _pick_positions(counts[name], quota + (i < remainder))
+                   for i, name in enumerate(sorted(counts))}
     selected: set[int] = set()
-    names = sorted(metric_indices)
-    base_quota, remainder = divmod(limit, len(names))
-    for metric_index, name in enumerate(names):
-        quota = base_quota + (1 if metric_index < remainder else 0)
-        if quota <= 0:
-            continue
-        candidates = metric_indices[name]
-        selected.update(_evenly_pick(candidates, quota))
-
-    # Records often contain several metrics, so their quota selections overlap.
-    # Use the remaining capacity for an even global sample without exceeding limit.
-    remaining_capacity = limit - len(selected)
-    if remaining_capacity > 0:
-        remaining = [index for index in range(len(records)) if index not in selected]
-        selected.update(_evenly_pick(remaining, remaining_capacity))
-
-    return [records[index] for index in sorted(selected)]
-
-
-def _evenly_pick(values: list[int], limit: int) -> list[int]:
-    if len(values) <= limit:
-        return values
-    if limit <= 1:
-        return values[-1:]
-    last = len(values) - 1
-    positions = {round(index * last / (limit - 1)) for index in range(limit)}
-    return [values[position] for position in sorted(positions)]
+    occurrences: Counter[str] = Counter()
+    for index, record in enumerate(_stream_records(stream, size)):
+        for name in _metric_names(record):
+            if occurrences[name] in targets.get(name, ()):
+                selected.add(index)
+            occurrences[name] += 1
+    # Fill overlapping quotas using positions among unselected records.
+    fillers = _pick_positions(total - len(selected), limit - len(selected))
+    result = []
+    remaining_index = 0
+    for index, record in enumerate(_stream_records(stream, size)):
+        if index in selected:
+            result.append(record)
+        else:
+            if remaining_index in fillers:
+                result.append(record)
+            remaining_index += 1
+    return result

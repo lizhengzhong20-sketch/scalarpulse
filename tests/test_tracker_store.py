@@ -2,12 +2,43 @@ from __future__ import annotations
 
 import json
 import math
+import tracemalloc
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from scalarpulse import Tracker
 from scalarpulse.store import RunStore, _evenly_sample
+
+
+@pytest.mark.parametrize("metrics", [
+    {"train/loss": 1, "train": {"loss": 2}},
+    {"train": {"loss": 2}, "train/loss": 1},
+    {" loss ": 1, "loss": 2},
+    {"a": {"b/c": 1, "b": {"c": 2}}},
+])
+def test_metric_collision_rejects_whole_log(tmp_path, metrics):
+    with Tracker(log_dir=tmp_path, launch=False, quiet=True) as run:
+        with pytest.raises(ValueError, match="duplicate"):
+            run.log(metrics)
+        assert run.store.records(run.id) == []
+
+
+def test_failed_append_does_not_advance_state(tmp_path, monkeypatch):
+    run = Tracker(log_dir=tmp_path, launch=False, quiet=True)
+    run.log({"loss": 1})
+    append = run.store.append
+    def fail(*args):
+        raise OSError("injected append failure")
+    monkeypatch.setattr(run.store, "append", fail)
+    with pytest.raises(OSError):
+        run.log({"loss": 0.2}, step=50)
+    monkeypatch.setattr(run.store, "append", append)
+    run.log({"accuracy": 0.9})
+    run.finish()
+    records = run.store.records(run.id)
+    assert [(r["seq"], r["step"]) for r in records] == [(0, 0), (1, 1)]
+    assert run.store.read_run(run.id)["summary"] == {"loss": 1, "accuracy": 0.9}
 
 
 def test_tracker_writes_flattened_strict_jsonl_and_updates_summary(tmp_path):
@@ -176,3 +207,37 @@ def test_store_records_keeps_valid_lines_around_a_corrupt_line(tmp_path):
 )
 def test_evenly_sample_is_deterministic_and_retains_endpoints(records, limit, expected):
     assert [record["i"] for record in _evenly_sample(records, limit)] == expected
+
+
+def test_state_sampling_has_bounded_memory(tmp_path):
+    store = RunStore(tmp_path)
+    store.create_run({"id": "run"})
+    with (tmp_path / "run/metrics.jsonl").open("w", encoding="utf-8") as stream:
+        for step in range(100_000):
+            stream.write(json.dumps({"step": step, "seq": step, "metrics": {"loss": step}}) + "\n")
+    tracemalloc.start()
+    try:
+        state = store.state("run", max_records=10)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert len(state["records"]) == 10
+    assert [state["records"][i]["step"] for i in (0, -1)] == [0, 99999]
+    assert peak < 16 * 1024 * 1024
+
+
+def test_state_excludes_unterminated_and_invalid_records(tmp_path):
+    store = RunStore(tmp_path)
+    store.create_run({"id": "run"})
+    path = tmp_path / "run/metrics.jsonl"
+    path.write_bytes(b'{"step":0,"metrics":{"loss":1}}\nnull\nbad\n{"step":1,"metrics":{"loss":2}}')
+    assert [r["step"] for r in store.state("run", max_records=5)["records"]] == [0]
+
+
+@pytest.mark.parametrize("limit,expected", [(1, [4]), (2, [3, 4]), (3, [0, 3, 4]), (8, [0, 1, 2, 3, 4])])
+def test_state_sampling_overlapping_metrics_fills_budget(tmp_path, limit, expected):
+    store = RunStore(tmp_path)
+    store.create_run({"id": "run"})
+    for step in range(5):
+        store.append("run", {"step": step, "metrics": {"a": step, "b": step}})
+    assert [r["step"] for r in store.state("run", max_records=limit)["records"]] == expected

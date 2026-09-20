@@ -911,6 +911,12 @@
         cards: new Map(),
         lastEventAt: null,
         fetchFailed: false,
+        snapshotRequestId: 0,
+        snapshotPending: false,
+        liveRevision: 0,
+        recoveryVersion: 0,
+        recoveredVersion: 0,
+        recoveryTimer: null,
         reconnectAttempt: 0,
         reconnectTimer: null,
         toastTimer: null
@@ -991,12 +997,22 @@
         return dedupeAndSort(result);
       }
 
-      function dedupeAndSort(points) {
+      function dedupeAndSort(points, liveBoundary = Infinity) {
         const byStep = new Map();
-        points.forEach((point) => byStep.set(String(point.step), point));
+        points.forEach((point) => {
+          const key = String(point.step);
+          if (newerPoint(point, byStep.get(key), liveBoundary)) byStep.set(key, point);
+        });
         return [...byStep.values()]
           .sort((a, b) => a.step - b.step)
           .slice(-MAX_POINTS_PER_METRIC);
+      }
+
+      function newerPoint(incoming, existing, liveBoundary = Infinity) {
+        if (!existing) return true;
+        if (incoming.seq != null && existing.seq != null && incoming.seq !== existing.seq) return incoming.seq > existing.seq;
+        if ((existing.liveRevision || 0) > liveBoundary && !incoming.liveRevision) return false;
+        return !existing.time || !incoming.time || incoming.time >= existing.time;
       }
 
       function normalizedRun(raw, fallbackId) {
@@ -1009,6 +1025,7 @@
           name: String(raw.name ?? raw.run_name ?? raw.runName ?? raw.label ?? id),
           status: String(raw.status ?? raw.state ?? "running"),
           startedAt,
+          endedAt: toTimestamp(raw.ended_at ?? raw.endedAt),
           updatedAt,
           metricCount: Number(raw.metric_count ?? raw.metricCount) || Object.keys(raw.summary ?? {}).length,
           metrics: new Map()
@@ -1030,13 +1047,14 @@
             const time = record.timestamp ?? record.time ?? updatedAt;
             const normalizedTime = toTimestamp(time);
             if (normalizedTime && (!run.updatedAt || normalizedTime > run.updatedAt)) run.updatedAt = normalizedTime;
-            const values = record.metrics && typeof record.metrics === "object" ? record.metrics : record;
+            const nested = record.metrics && typeof record.metrics === "object";
+            const values = nested ? record.metrics : record;
             Object.entries(values).forEach(([name, value]) => {
-              if (["step", "iteration", "epoch", "x", "timestamp", "time", "metrics", "run_id", "runId"].includes(name)) return;
+              if (!nested && ["step", "iteration", "epoch", "x", "timestamp", "time", "metrics", "run_id", "runId", "seq"].includes(name)) return;
               const numeric = toFinite(value);
               if (numeric == null) return;
               if (!run.metrics.has(name)) run.metrics.set(name, []);
-              run.metrics.get(name).push({ step, value: numeric, time: normalizedTime });
+              run.metrics.get(name).push({ step, value: numeric, time: normalizedTime, seq: record.seq == null ? null : toFinite(record.seq) });
             });
           });
           run.metrics.forEach((points, name) => run.metrics.set(name, dedupeAndSort(points)));
@@ -1045,23 +1063,27 @@
         return run;
       }
 
-      function mergeRun(incoming, replaceMetrics = false) {
+      function mergeRun(incoming, replaceMetrics = false, liveBoundary = Infinity) {
         if (!incoming) return;
         const existing = app.runs.get(incoming.id);
         if (!existing) {
           app.runs.set(incoming.id, incoming);
           return;
         }
-        existing.name = incoming.name || existing.name;
-        existing.status = incoming.status || existing.status;
-        existing.startedAt = incoming.startedAt || existing.startedAt;
-        existing.updatedAt = incoming.updatedAt || existing.updatedAt;
+        if ((existing.liveRevision || 0) <= liveBoundary) {
+          existing.name = incoming.name || existing.name;
+          // A completed run cannot return to running without a new run id.
+          if (!existing.endedAt || incoming.endedAt) existing.status = incoming.status || existing.status;
+          existing.startedAt = incoming.startedAt || existing.startedAt;
+          existing.endedAt = incoming.endedAt || existing.endedAt;
+          existing.updatedAt = existing.endedAt || [existing.updatedAt, incoming.updatedAt].filter(Boolean).sort().pop();
+        }
         existing.metricCount = Math.max(existing.metricCount || 0, incoming.metricCount || 0);
         if (replaceMetrics) existing.metrics = incoming.metrics;
         else {
           incoming.metrics.forEach((points, name) => {
             const combined = [...(existing.metrics.get(name) || []), ...points];
-            existing.metrics.set(name, dedupeAndSort(combined));
+            existing.metrics.set(name, dedupeAndSort(combined, liveBoundary));
           });
         }
       }
@@ -1076,7 +1098,7 @@
         return payload;
       }
 
-      function ingestSnapshot(rawPayload) {
+      function ingestSnapshot(rawPayload, liveBoundary = Infinity) {
         const payload = unwrap(rawPayload) || {};
         const rawRuns = payload.runs ?? payload.items;
         const preferredId = payload.selected_run_id ?? payload.active_run_id ?? payload.activeRunId;
@@ -1102,7 +1124,7 @@
         // The ScalarPulse API keeps run metadata in `runs` and the selected run's
         // sampled history in top-level `records`. Preserve cached histories for
         // the other runs, then replace only the selected run with its snapshot.
-        incoming.forEach((run) => mergeRun(run, false));
+        incoming.forEach((run) => mergeRun(run, false, liveBoundary));
         if (preferredId != null && Array.isArray(payload.records)) {
           const selectedMeta = payload.run
             ?? (Array.isArray(rawRuns) ? rawRuns.find((raw) => String(raw?.id ?? raw?.run_id) === String(preferredId)) : null)
@@ -1110,7 +1132,7 @@
           const selected = normalizedRun({ ...selectedMeta, id: preferredId, records: payload.records }, preferredId);
           // Merge instead of replace: an SSE point may arrive while this
           // snapshot request is in flight, and must not be rolled back.
-          mergeRun(selected, false);
+          mergeRun(selected, false, liveBoundary);
         }
         selectBestRun(preferredId);
         scheduleRender();
@@ -1132,7 +1154,7 @@
         return app.runs.get(runId);
       }
 
-      function appendMetric(run, name, value, step, time) {
+      function appendMetric(run, name, value, step, time, seq = null) {
         const numeric = toFinite(value);
         if (numeric == null || !name) return;
         const series = run.metrics.get(String(name)) || [];
@@ -1140,20 +1162,26 @@
         const point = {
           step: toFinite(step) ?? fallbackStep,
           value: numeric,
+          seq: seq == null ? null : toFinite(seq),
+          liveRevision: app.liveRevision,
           time: toTimestamp(time) || new Date().toISOString()
         };
         const last = series[series.length - 1];
-        if (last && last.step === point.step) series[series.length - 1] = point;
+        if (last && last.step === point.step) {
+          if (newerPoint(point, last)) series[series.length - 1] = point;
+        }
         else if (!last || point.step > last.step) series.push(point);
         else {
           const index = series.findIndex((item) => item.step >= point.step);
-          if (index >= 0 && series[index].step === point.step) series[index] = point;
+          if (index >= 0 && series[index].step === point.step) {
+            if (newerPoint(point, series[index])) series[index] = point;
+          }
           else series.splice(index < 0 ? series.length : index, 0, point);
         }
         if (series.length > MAX_POINTS_PER_METRIC) series.splice(0, series.length - MAX_POINTS_PER_METRIC);
         run.metrics.set(String(name), series);
         run.metricCount = Math.max(run.metricCount || 0, run.metrics.size);
-        run.updatedAt = point.time;
+        run.updatedAt = run.endedAt || [run.updatedAt, point.time].filter(Boolean).sort().pop();
       }
 
       function applyPayload(rawPayload) {
@@ -1185,9 +1213,17 @@
 
         const runId = payload.run_id ?? payload.runId ?? payload.run?.id ?? payload.id ?? "default";
         const run = ensureRun(runId, payload);
+        app.liveRevision++;
+        if (payload.status || payload.name || payload.run_name || payload.runName || payload.started_at || payload.startedAt || payload.ended_at || payload.endedAt) {
+          run.liveRevision = app.liveRevision;
+        }
         if (payload.run_name || payload.runName) run.name = String(payload.run_name ?? payload.runName);
-        if (payload.status) run.status = String(payload.status);
+        if (payload.status && (!run.endedAt || payload.ended_at || payload.endedAt)) run.status = String(payload.status);
         if (payload.started_at || payload.startedAt) run.startedAt = toTimestamp(payload.started_at ?? payload.startedAt);
+        if (payload.ended_at || payload.endedAt) {
+          run.endedAt = toTimestamp(payload.ended_at ?? payload.endedAt);
+          run.updatedAt = run.endedAt || run.updatedAt;
+        }
 
         const step = payload.step ?? payload.iteration ?? payload.epoch ?? payload.x;
         const time = payload.timestamp ?? payload.time ?? payload.updated_at;
@@ -1196,7 +1232,7 @@
         if (payload.metrics && typeof payload.metrics === "object" && !Array.isArray(payload.metrics)) {
           Object.entries(payload.metrics).forEach(([name, value]) => {
             if (toFinite(value) != null) {
-              appendMetric(run, name, value, step, time);
+              appendMetric(run, name, value, step, time, payload.seq);
               appended = true;
             } else {
               const points = seriesFrom(value, time);
@@ -1211,15 +1247,15 @@
 
         const metricName = payload.metric ?? payload.metric_name ?? payload.metricName;
         if (metricName && payload.value != null) {
-          appendMetric(run, metricName, payload.value, step, time);
+          appendMetric(run, metricName, payload.value, step, time, payload.seq);
           appended = true;
         }
 
         if (!appended && payload.values && typeof payload.values === "object") {
-          Object.entries(payload.values).forEach(([name, value]) => appendMetric(run, name, value, step, time));
+          Object.entries(payload.values).forEach(([name, value]) => appendMetric(run, name, value, step, time, payload.seq));
         }
 
-        if (time && !appended) run.updatedAt = toTimestamp(time) || run.updatedAt;
+        if (time && !appended) run.updatedAt = run.endedAt || [run.updatedAt, toTimestamp(time)].filter(Boolean).sort().pop();
         selectBestRun();
         scheduleRender();
       }
@@ -1659,13 +1695,30 @@
           return;
         }
         app.lastEventAt = new Date();
+        if (event.type === "reset" || payload.type === "reset") {
+          app.recoveryVersion++;
+          scheduleRecovery();
+          return;
+        }
         if (app.paused) {
           app.pending.push(payload);
-          if (app.pending.length > MAX_PAUSED_EVENTS) app.pending.splice(0, app.pending.length - MAX_PAUSED_EVENTS);
+          if (app.pending.length > MAX_PAUSED_EVENTS) {
+            app.pending.splice(0, app.pending.length - MAX_PAUSED_EVENTS);
+            app.recoveryVersion++;
+          }
           setConnection("paused", `已暂停 · 缓冲 ${app.pending.length}`);
           return;
         }
         applyPayload(payload);
+      }
+
+      function scheduleRecovery() {
+        if (app.paused || app.snapshotPending || app.recoveryTimer || app.recoveredVersion >= app.recoveryVersion) return;
+        setConnection("connecting", "正在重新同步历史");
+        app.recoveryTimer = setTimeout(() => {
+          app.recoveryTimer = null;
+          loadSnapshot(app.selectedRunId);
+        }, 1000);
       }
 
       function connectEvents() {
@@ -1694,19 +1747,43 @@
       }
 
       async function loadSnapshot(runId = null) {
+        // Even a deferred selection invalidates the previous request. Otherwise
+        // its response could select the old run after pause/resume.
+        const requestId = ++app.snapshotRequestId;
+        clearTimeout(app.recoveryTimer);
+        app.recoveryTimer = null;
+        if (app.paused) {
+          app.snapshotPending = false;
+          app.recoveryVersion++;
+          return;
+        }
+        const liveBoundary = app.liveRevision;
+        const recoveryVersion = app.recoveryVersion;
+        app.snapshotPending = true;
         try {
           const url = runId == null ? API_STATE : `${API_STATE}?run_id=${encodeURIComponent(runId)}`;
           const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json();
+          if (requestId !== app.snapshotRequestId) return;
+          if (app.paused) { app.recoveryVersion++; return; }
           app.fetchFailed = false;
-          ingestSnapshot(payload);
+          ingestSnapshot(payload, liveBoundary);
+          app.recoveredVersion = Math.max(app.recoveredVersion, recoveryVersion);
+          if (app.source?.readyState === EventSource.OPEN) setConnection("live", "实时连接");
         } catch (error) {
+          if (requestId !== app.snapshotRequestId) return;
           app.fetchFailed = true;
+          app.recoveryVersion++;
           dom.emptyTitle.textContent = "暂时无法读取训练状态";
           dom.emptyCopy.textContent = "页面会继续尝试接收实时事件，请确认服务端已启动。";
           console.warn("ScalarPulse state request failed", error);
           scheduleRender();
+        } finally {
+          if (requestId === app.snapshotRequestId) {
+            app.snapshotPending = false;
+            scheduleRecovery();
+          }
         }
       }
 
@@ -1723,7 +1800,10 @@
           const queued = app.pending.splice(0);
           queued.forEach(applyPayload);
           setConnection(app.source?.readyState === EventSource.OPEN ? "live" : "connecting", app.source?.readyState === EventSource.OPEN ? "实时连接" : "连接中");
-          showToast(queued.length ? `已补齐 ${queued.length} 条缓冲事件。` : "已继续实时更新。", 2200);
+          if (app.recoveredVersion < app.recoveryVersion) {
+            showToast("缓冲存在缺口，正在重新同步历史（可能采样）。", 2600);
+            scheduleRecovery();
+          } else showToast(queued.length ? `已应用 ${queued.length} 条缓冲事件。` : "已继续实时更新。", 2200);
           scheduleRender();
         }
       }
@@ -1840,6 +1920,7 @@
       window.addEventListener("beforeunload", () => {
         if (app.source) app.source.close();
         clearTimeout(app.reconnectTimer);
+        clearTimeout(app.recoveryTimer);
       });
 
       setInterval(() => {
